@@ -14,10 +14,13 @@ from tqdm import tqdm
 
 taxon_map = "taxon_map.json" 
 ids_dir = "./ids"
+loaded_ids = {}
 
 #------------------------------------------------------------------------------
 # functions :p
 #------------------------------------------------------------------------------
+
+### function for taxon map and writting 
 
 def load_taxon_map(filename=taxon_map) -> dict:
     if not os.path.exists(filename):
@@ -25,12 +28,12 @@ def load_taxon_map(filename=taxon_map) -> dict:
     with open(filename, "r", encoding="utf-8") as f:
         return json.load(f)
 
-# add new taxon id's 
-
 def save_taxon_map(taxon_map: dict, filename=taxon_map):
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(taxon_map, f, indent=2)
 
+
+### functions for downloading and parsing proteomes 
 
 def download_uniprot_ids(species: str, taxon_id: str, cache_file: str) -> list:
 
@@ -38,15 +41,13 @@ def download_uniprot_ids(species: str, taxon_id: str, cache_file: str) -> list:
         exit("Species cannot be 'random' for download_uniprot_ids")
 
     url = "https://rest.uniprot.org/uniprotkb/stream"
-    # what the end it's suppoused to look like
-    # "https://rest.uniprot.org/uniprotkb/stream?fields=accession%2Cxref_alphafolddb%2Cxref_pdb%2Cxref_ensembl&format=tsv&query=%28organism_id%3A9606%29"
+
 
     # add more fields here if you want. don't forget about the xref_ if they come from other databases
-    #fields = "accession,alphafolddb,pdb,ensembl"
-    
+
     params = {
         "query": f"organism_id:{taxon_id}",
-        "fields": "accession,xref_alphafolddb,xref_pdb,xref_ensembl",
+        "fields": "accession,xref_alphafolddb,xref_pdb,xref_ensembl,xref_ensemblbacteria,xref_ensemblfungi,xref_ensemblprotists", # all of the ensembl fields
         "format": "tsv"
     }
     
@@ -56,7 +57,7 @@ def download_uniprot_ids(species: str, taxon_id: str, cache_file: str) -> list:
 
 
     total_size = int(r.headers.get("content-length", 0))  # in bytes
-    block_size = 1024  # 1KB chunks
+    block_size = 1024  
 
     # the bar is not showing in my machine, dk why, but it shows the size :P
     with tqdm(total=total_size, unit="B", unit_scale=True, desc=f"Downloading {species}") as pbar:
@@ -66,41 +67,27 @@ def download_uniprot_ids(species: str, taxon_id: str, cache_file: str) -> list:
                 f.write(chunk)
                 continue
 
-    # if total_size != 0 and pbar.n != total_size:
-    #     raise RuntimeError("Could not download file (incomplete)")
 
-    # text_data = r.text.strip()
-    # lines = text_data.split("\n")
-
-    # if len(lines) < 2:
-    #     print("Warning: got fewer than 2 lines from UniProt (header only).")
-    
-    # save to cache_file exactly as received (including header line)
-    with open(cache_file, "rw") as f:
-            text_data = r.text.strip()
-            lines = text_data.split("\n")
-            f.write(text_data + "\n")
-            if len(lines) < 2:
-                print("Warning: got fewer than 2 lines from UniProt (header only).")
-
-
-
+### function for getting a random ID 
 
 def parse_tsv_for_db(tsv_file: str, db: str):
 
     # in the TSV header columns are in this order:
-    # Entry,AlphaFoldDB,PDB,Ensembl
+    # Entry,AlphaFoldDB,PDB,Ensembl, EnsemblBacteria
+    # gotta try this
     # if you want to add more stuff, just add it to the request and update this logic :)
     # direct mapping for clarity:
 
     col_index_map = {
         "uniprot":  0,  # the "Entry" column
-        "af":       1,  # the "AlphaFoldDB" column
+        "af":       1,  # the "AlphaFoldDB" column (this is the same as the uniprot, but I keep it because there are UP w/o AF)
         "pdb":      2,  # the "PDB" column
-        "enst":     3,  # the "Ensembl" column
+        "enst":     3#,  # the "Ensembl" column
+        #"enst_bact": 4
     }
     
     idx = col_index_map.get(db)
+
     if idx is None:
         raise ValueError(f"Unsupported db type '{db}'. Must be one of {list(col_index_map.keys())}")
 
@@ -113,27 +100,56 @@ def parse_tsv_for_db(tsv_file: str, db: str):
     
     # header
     data_lines = lines[1:]
-    
+  
+    # number of columns
+    for i in lines[0:1]:
+        len_cols = len(i.split("\t"))
+    # print(len_cols)
+   
+
     ids = []
     for line in data_lines:
         columns = line.split("\t")
-        if len(columns) < 4:
-            continue
-        
-        col_data = columns[idx].strip()  # this is the relevant cell
-        if not col_data:
-            # no data in this column for this row
-            continue
-        
-        # cells might have multiple IDs separated by semicolons, e.g. "ENST00000380596.10;"
-        # split by ";" and filter out empty strings
-        splitted = [x.strip() for x in col_data.split(";") if x.strip()]
-        
-        # extend our global list
-        ids.extend(splitted)
-    
+        #print(columns)
+        # if len(columns) < 4: # this should match the length of the request fields!
+        #     continue
+
+        if db == "enst":
+            #print("AA")
+            #print(len_cols)
+            
+            possible_ensembl_cols = range(3,len_cols)
+            found_data = None
+            for c in possible_ensembl_cols:
+                #print("BB")
+                #print(c)
+                val = columns[c].strip()
+                #print(val)
+                if val:
+                    #print("CC")
+                    found_data = val
+                    break
+            if not found_data:
+                #print("DD")
+                # no ensembl data in this row
+                continue
+            splitted = [x.strip() for x in found_data.split(";") if x.strip()]
+            ids.extend(splitted)
+        else:
+            #print("BB")
+            # for uniprot, af, pdb
+            # if db not in col_index_map:
+            #     raise ValueError(f"Unknown db '{db}'.")
+            col_idx = col_index_map[db]
+            cell = columns[col_idx].strip()
+            if not cell:
+                continue
+            splitted = [x.strip() for x in cell.split(";") if x.strip()]
+            ids.extend(splitted)
+
     return ids
 
+### function for getting a random ID 
 
 def get_random_uniprot_id_for_species(species: str, db: str,taxon_map: dict) -> str:
 
@@ -153,28 +169,24 @@ def get_random_uniprot_id_for_species(species: str, db: str,taxon_map: dict) -> 
     os.makedirs(ids_dir, exist_ok=True)
     cache_file = os.path.join(ids_dir, f"{species}.tsv")
     
-    # load from cache if present
-    if os.path.isfile(cache_file):
-        print(f"Loading IDs from cache file: {cache_file}")
-        with open(cache_file, "r", encoding="utf-8") as f:
-            lines = f.read().strip().split("\n")
-        # if empty or only header, we might need to re-download
-        if len(lines) < 2:
-            print("Cache file is empty or invalid; re-downloading...")
-            accessions = download_uniprot_ids(species, taxon_id, cache_file)
+    if (species, db) not in loaded_ids:
+        # not yet loaded -> check file 
+        if os.path.isfile(cache_file):
+            print(f"Loading IDs from cache file: {cache_file}")
         else:
-            accessions = lines[1:]  # skip header
+            print(f"No cache found for {species}; downloading from UniProt...")
+            download_uniprot_ids(species, taxon_id, cache_file)
+
+        # parse the file 
+        relevant_ids = parse_tsv_for_db(cache_file, db)
+        loaded_ids[(species, db)] = relevant_ids
     else:
-        print(f"No cache found for {species}; downloading from UniProt...")
-        accessions = download_uniprot_ids(species, taxon_id, cache_file)
+        # already loaded -> just fetch from cache (so there are no extra prints)
+        relevant_ids = loaded_ids[(species, db)]
 
-    relevant_ids = parse_tsv_for_db(cache_file, db)
-
-    # no need for this now!
-    # if not accessions:
-    #     raise ValueError(f"No valid IDs found for species '{species}' (taxon_id={taxon_id}).")
-
+    # return one random ID from the cached/parsed list
     return random.choice(relevant_ids)
+
 
 #------------------------------------------------------------------------------
 # main and help
@@ -182,28 +194,29 @@ def get_random_uniprot_id_for_species(species: str, db: str,taxon_map: dict) -> 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Get a random ID (UniProt, AlphaFold, PDB, Ensembl ENST) or manage species->taxon map.\n"
+        description="Get  random IDs (UniProt, AlphaFold, PDB, Ensembl ENST) or manage species->taxon map.\n",
+        formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("args", nargs="*", help="""
 Examples:
-  radid add <species> <taxon_id>     # Add new species/taxon mapping
-  radid list                         # List local species->taxon mappings
-  radid homo_sapiens uniprot         # Random UniProt from Homo sapiens
-  radid mus_musculus af              # Random AlphaFold from mouse
-  radid mus_musculus pdb             # Random PDB ID from mouse
-  radid homo_sapiens enst            # Random Ensembl transcript
-  radid random enst                  # Random species, then random transcript
+  radid add <species> <taxon_id>     # Add new species/taxon mapping                \n
+  radid list                         # List local species->taxon mappings           \n
+  
+  radid homo_sapiens uniprot 1       # 1 random UniProt from Homo sapiens           \n
+  radid mus_musculus af      2       # 2 random AlphaFold IDs from mouse            \n
+  radid mus_musculus pdb     3       # 3 random PDB IDs from mouse                  \n
+  radid homo_sapiens enst    4       # 4 random Homo Sapiens Ensembl transcript IDs \n
+  radid random enst          5       # 5 random species, then 5 random transcript   \n
 """.strip())
 
     parsed = parser.parse_args()
+    
     if not parsed.args:
         parser.print_help()
         return
-
+    
     # species->taxon map
     taxon_map = load_taxon_map()
-
-
 
     if parsed.args[0].lower() == "add":
         if len(parsed.args) != 3:
@@ -216,19 +229,24 @@ Examples:
         return
 
     if parsed.args[0].lower() == "list":
-        print("Local files:\n")
+        #print("\n")
+        print("Local files available at: ", ids_dir)
+        print("Species:")
+        print("-----------------------------------------------------------------------------")
         for i in os.listdir(ids_dir):
-
-            print(i[:-4])
+    
+            print(i[:-4]) # so it does not print the .tsv each time, just the file name
         return
+    print("-----------------------------------------------------------------------------")
+    
 
-    if len(parsed.args) > 2:
+    if len(parsed.args) > 3:
         print("ERROR: invalid usage. Example: radid homo_sapiens uniprot")
         return
 
-    species, db = parsed.args
+    species, db, number = parsed.args
     db = db.lower()
-    
+    number = int(number)
     #  { "uniprot", "af", "pdb", "enst" }
     valid_dbs = ["uniprot", "af", "pdb", "enst"]
     if db not in valid_dbs:
@@ -236,10 +254,20 @@ Examples:
         return
 
     try:
-        random_id = get_random_uniprot_id_for_species(species, db, taxon_map)
-        print(random_id)
-    except Exception as e:
-        print(f"ERROR: {e}")
+        if number == 1:
+
+            random_id = get_random_uniprot_id_for_species(species, db, taxon_map)
+            print(random_id)
+
+        elif number > 1:
+            for i in range(1,number+1):
+                        random_id = get_random_uniprot_id_for_species(species, db, taxon_map)
+                        print(random_id)
+    except Exception as e: 
+        if isinstance(e, IndexError):
+            print(f"Not enough ID's. Try less than:", number)
+        else:
+            print(f"Ups!: {e}")
 
 if __name__ == "__main__":
     main()
