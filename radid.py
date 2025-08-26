@@ -73,7 +73,7 @@ def download_uniprot_ids(species: str, taxon_id: str, cache_file: str) -> list:
 def parse_tsv_for_db(tsv_file: str, db: str):
 
     # in the TSV header columns are in this order:
-    # Entry,AlphaFoldDB,PDB,Ensembl, EnsemblBacteria
+    # Entry,AlphaFoldDB,PDB,Ensembl, EnsemblBacteria, etc
     # gotta try this
     # if you want to add more stuff, just add it to the request and update this logic :)
     # direct mapping for clarity:
@@ -237,20 +237,19 @@ Examples:
     
             print(i[:-4]) # so it does not print the .tsv each time, just the file name
         return
-    print("-----------------------------------------------------------------------------")
     
 
     if len(parsed.args) > 3:
-        print("ERROR: invalid usage. Example: radid homo_sapiens uniprot")
+        print("ERROR: invalid usage. Example: ./radid.py homo_sapiens uniprot 1")
         return
 
     species, db, number = parsed.args
     db = db.lower()
     number = int(number)
-    #  { "uniprot", "af", "pdb", "enst" }
+    
     valid_dbs = ["uniprot", "af", "pdb", "enst"]
     if db not in valid_dbs:
-        print(f"ERROR: unknown db '{db}'. Choose from {valid_dbs}")
+        print(f"Unknown db: '{db}'. Choose from {valid_dbs}")
         return
 
     try:
@@ -265,7 +264,7 @@ Examples:
                         print(random_id)
     except Exception as e: 
         if isinstance(e, IndexError):
-            print(f"Not enough ID's. Try less than:", number)
+            print(f"Not enough ID's. Try less than:", number) # most common error is that some species only have (ie) 5 PDB ID's, and the user migth as for 5 random. This error handles that
         else:
             print(f"Ups!: {e}")
 
