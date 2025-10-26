@@ -151,40 +151,45 @@ def parse_tsv_for_db(tsv_file: str, db: str):
 
 ### function for getting a random ID 
 
-def get_random_uniprot_id_for_species(species: str, db: str,taxon_map: dict) -> str:
-
+def get_random_uniprot_id_for_species(species: str, db: str, taxon_map: dict) -> str:
     if species == "random":
         if not taxon_map:
             raise ValueError("No species in taxon_map.json, cannot pick a random one!")
         species = random.choice(list(taxon_map.keys()))
         print(f"Selected random species: {species}")
 
-    if species not in taxon_map:
-        raise ValueError(f"Species '{species}' not found in local taxon map. "
-                         f"Use 'radid add <species> <taxon_id>' to add it.")
-
-    taxon_id = taxon_map[species]
-
-    #  cache file path
+    #  file path (example: ids/example.tsv)
     os.makedirs(ids_dir, exist_ok=True)
     cache_file = os.path.join(ids_dir, f"{species}.tsv")
-    
-    if (species, db) not in loaded_ids:
-        # not yet loaded -> check file 
-        if os.path.isfile(cache_file):
-            print(f"Loading IDs from cache file: {cache_file}")
-        else:
-            print(f"No cache found for {species}; downloading from UniProt...")
-            download_uniprot_ids(species, taxon_id, cache_file)
 
-        # parse the file 
+    # cached TSV for this 'species'
+    # use it even if it's not in taxon_map.
+    need_download = not os.path.isfile(cache_file)
+
+    if need_download:
+        # only when we must download
+        if species not in taxon_map:
+            raise ValueError(
+                f"Species '{species}' not found in local taxon map and no cache file at {cache_file}."
+                " Use 'radid add <species> <taxon_id>' or drop a TSV at ids/<species>.tsv."
+            )
+        taxon_id = taxon_map[species]
+        print(f"No cache found for {species}; downloading from UniProt...")
+        download_uniprot_ids(species, taxon_id, cache_file)
+    else:
+        if (species, db) not in loaded_ids:
+            print(f"Loading IDs from cache file: {cache_file}")
+
+
+    # load/refresh in-memory cache per 
+    if (species, db) not in loaded_ids:
         relevant_ids = parse_tsv_for_db(cache_file, db)
+        if not relevant_ids:
+            raise ValueError(f"No IDs found in {cache_file} for db='{db}'.")
         loaded_ids[(species, db)] = relevant_ids
     else:
-        # already loaded -> just fetch from cache (so there are no extra prints)
         relevant_ids = loaded_ids[(species, db)]
 
-    # return one random ID from the cached/parsed list
     return random.choice(relevant_ids)
 
 

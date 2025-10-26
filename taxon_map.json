@@ -1,5 +1,6 @@
 {
   "homo_sapiens": "9606",
   "mus_musculus": "10090",
-  "zebra_fish": "7955"
+  "zebra_fish": "7955",
+  "adenoA": "28282"
 }
