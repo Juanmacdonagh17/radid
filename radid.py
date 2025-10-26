@@ -202,6 +202,7 @@ Examples:
   radid add <species> <taxon_id>     # Add new species/taxon mapping                \n
   radid list                         # List local species->taxon mappings           \n
   
+  radid example uniprot      10      # 10 random UniProt from example species (already loeaded)      \n  
   radid homo_sapiens uniprot 1       # 1 random UniProt from Homo sapiens           \n
   radid mus_musculus af      2       # 2 random AlphaFold IDs from mouse            \n
   radid mus_musculus pdb     3       # 3 random PDB IDs from mouse                  \n
@@ -240,7 +241,7 @@ Examples:
     
 
     if len(parsed.args) > 3:
-        print("ERROR: invalid usage. Example: ./radid.py homo_sapiens uniprot 1")
+        print("ERROR: invalid usage. Example: ./radid.py example uniprot 10")
         return
 
     species, db, number = parsed.args
