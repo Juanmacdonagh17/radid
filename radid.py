@@ -207,7 +207,7 @@ Examples:
   radid add <species> <taxon_id>     # Add new species/taxon mapping                \n
   radid list                         # List local species->taxon mappings           \n
   
-  radid example uniprot      10      # 10 random UniProt from example species (already loeaded)      \n  
+  radid example uniprot      10      # 10 random UniProt from example species (already loaded)      \n  
   radid homo_sapiens uniprot 1       # 1 random UniProt from Homo sapiens           \n
   radid mus_musculus af      2       # 2 random AlphaFold IDs from mouse            \n
   radid mus_musculus pdb     3       # 3 random PDB IDs from mouse                  \n
@@ -237,11 +237,16 @@ Examples:
     if parsed.args[0].lower() == "list":
         #print("\n")
         print("Local files available at: ", ids_dir)
-        print("Species:")
+        print("Downloaded species:")
         print("-----------------------------------------------------------------------------")
         for i in os.listdir(ids_dir):
     
             print(i[:-4]) # so it does not print the .tsv each time, just the file name
+        print("\n")
+        print("-----------------------------------------------------------------------------")
+        print("\nSpecies in taxon_map.json (added):") # they can differ (you first add and when you request the species it gets downloaded)
+        for species, taxon_id in taxon_map.items():
+            print(f"  {species} -> {taxon_id}")
         return
     
 
