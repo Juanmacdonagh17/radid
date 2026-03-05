@@ -67,6 +67,20 @@ def download_uniprot_ids(species: str, taxon_id: str, cache_file: str) -> list:
                 f.write(chunk)
                 continue
 
+### function for size checking, this are not large files at all but just in case
+
+def file_size_kb(path: str) -> float:
+    return os.path.getsize(path) / 1024.0
+
+def dir_size_kb(path: str) -> float:
+    total = 0
+    if not os.path.isdir(path):
+        return 0.0
+    for root, _, files in os.walk(path):
+        for fn in files:
+            total += os.path.getsize(os.path.join(root, fn))
+    return total / 1024.0
+
 
 ### function for getting a random ID 
 
@@ -176,6 +190,7 @@ def get_random_uniprot_id_for_species(species: str, db: str, taxon_map: dict) ->
         taxon_id = taxon_map[species]
         print(f"No cache found for {species}; downloading from UniProt...")
         download_uniprot_ids(species, taxon_id, cache_file)
+        print(f"Saved {file_size_kb(cache_file):.1f} KB. Total cache: {dir_size_kb(ids_dir):.1f} KB \n")
     else:
         if (species, db) not in loaded_ids:
             print(f"Loading IDs from cache file: {cache_file}")
@@ -208,6 +223,7 @@ Examples:
   radid list                         # List local species->taxon mappings           \n
   
   radid example uniprot      10      # 10 random UniProt from example species (already loaded)      \n  
+  radid uniprot example      10      # same as above, order does not matter :)     \n                      
   radid homo_sapiens uniprot 1       # 1 random UniProt from Homo sapiens           \n
   radid mus_musculus af      2       # 2 random AlphaFold IDs from mouse            \n
   radid mus_musculus pdb     3       # 3 random PDB IDs from mouse                  \n
@@ -254,9 +270,30 @@ Examples:
         print("ERROR: invalid usage. Example: ./radid.py example uniprot 10")
         return
 
-    species, db, number = parsed.args
-    db = db.lower()
-    number = int(number)
+    # species, db, number = parsed.args
+    # db = db.lower()
+    # number = int(number)
+
+
+
+    a1, a2, a3 = parsed.args
+
+    valid_dbs = {"uniprot", "af", "pdb", "enst"}
+
+    # arguments work both ways. less confusing
+    x1 = a1.lower()
+    x2 = a2.lower()
+
+    if x1 in valid_dbs and x2 not in valid_dbs:
+        db, species, number = x1, a2, int(a3)
+    elif x2 in valid_dbs and x1 not in valid_dbs:
+        species, db, number = a1, x2, int(a3)
+    elif x1 in valid_dbs and x2 in valid_dbs:
+        print(f"ERROR: both '{a1}' and '{a2}' look like dbs. Choose one of {sorted(valid_dbs)}.")
+        return
+    else:
+        print(f"ERROR: neither '{a1}' nor '{a2}' looks like a db. Choose from {sorted(valid_dbs)}.")
+        return
     
     valid_dbs = ["uniprot", "af", "pdb", "enst"]
     if db not in valid_dbs:
