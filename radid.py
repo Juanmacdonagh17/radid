@@ -52,7 +52,7 @@ def download_uniprot_ids(species: str, taxon_id: str, cache_file: str) -> list:
     }
     
     print(f"Fetching IDs for {species} (organism_id={taxon_id})")
-    r = requests.get(url, params=params,  stream=True)
+    r = requests.get(url, params=params,  stream=True, timeout=30)
     r.raise_for_status()
 
 
@@ -135,6 +135,8 @@ def parse_tsv_for_db(tsv_file: str, db: str):
             possible_ensembl_cols = range(3,len_cols)
             found_data = None
             for c in possible_ensembl_cols:
+                if c >= len(columns):      
+                    break
                 #print("BB")
                 #print(c)
                 val = columns[c].strip()
@@ -155,6 +157,8 @@ def parse_tsv_for_db(tsv_file: str, db: str):
             # if db not in col_index_map:
             #     raise ValueError(f"Unknown db '{db}'.")
             col_idx = col_index_map[db]
+            if col_idx >= len(columns):     # <-- add: same guard for uniprot/af/pdb
+                continue
             cell = columns[col_idx].strip()
             if not cell:
                 continue
@@ -165,47 +169,48 @@ def parse_tsv_for_db(tsv_file: str, db: str):
 
 ### function for getting a random ID 
 
-def get_random_uniprot_id_for_species(species: str, db: str, taxon_map: dict) -> str:
+def load_ids_for_species(species: str, db: str, taxon_map: dict) -> list:
     if species == "random":
-        if not taxon_map:
-            raise ValueError("No species in taxon_map.json, cannot pick a random one!")
-        species = random.choice(list(taxon_map.keys()))
+        # fix from before: pool map + cached-only species, not just the map
+        cached = [f[:-4] for f in os.listdir(ids_dir)] if os.path.isdir(ids_dir) else []
+        pool = sorted(set(taxon_map) | set(cached))
+        if not pool:
+            raise ValueError("No species available to pick from.")
+        species = random.choice(pool)
         print(f"Selected random species: {species}")
 
-    #  file path (example: ids/example.tsv)
     os.makedirs(ids_dir, exist_ok=True)
     cache_file = os.path.join(ids_dir, f"{species}.tsv")
-
-    # cached TSV for this 'species'
-    # use it even if it's not in taxon_map.
     need_download = not os.path.isfile(cache_file)
 
     if need_download:
-        # only when we must download
         if species not in taxon_map:
             raise ValueError(
-                f"Species '{species}' not found in local taxon map and no cache file at {cache_file}."
+                f"Species '{species}' not found in taxon map and no cache at {cache_file}."
                 " Use 'radid add <species> <taxon_id>' or drop a TSV at ids/<species>.tsv."
             )
         taxon_id = taxon_map[species]
         print(f"No cache found for {species}; downloading from UniProt...")
         download_uniprot_ids(species, taxon_id, cache_file)
-        print(f"Saved {file_size_kb(cache_file):.1f} KB. Total cache: {dir_size_kb(ids_dir):.1f} KB \n")
-    else:
-        if (species, db) not in loaded_ids:
-            print(f"Loading IDs from cache file: {cache_file}")
+        print(f"Saved {file_size_kb(cache_file):.1f} KB. Total cache: {dir_size_kb(ids_dir):.1f} KB\n")
+    elif (species, db) not in loaded_ids:
+        print(f"Loading IDs from cache file: {cache_file}")
 
-
-    # load/refresh in-memory cache per 
     if (species, db) not in loaded_ids:
         relevant_ids = parse_tsv_for_db(cache_file, db)
         if not relevant_ids:
             raise ValueError(f"No IDs found in {cache_file} for db='{db}'.")
         loaded_ids[(species, db)] = relevant_ids
-    else:
-        relevant_ids = loaded_ids[(species, db)]
 
-    return random.choice(relevant_ids)
+    return loaded_ids[(species, db)]
+
+
+def get_random_ids(species: str, db: str, taxon_map: dict, n: int) -> list:
+    ids = load_ids_for_species(species, db, taxon_map)
+    if n > len(ids):
+        print(f"Only {len(ids)} unique IDs available; returning all.")
+        n = len(ids)
+    return random.sample(ids, n)
 
 
 #------------------------------------------------------------------------------
@@ -266,7 +271,7 @@ Examples:
         return
     
 
-    if len(parsed.args) > 3:
+    if len(parsed.args) != 3:
         print("ERROR: invalid usage. Example: ./radid.py example uniprot 10")
         return
 
@@ -277,6 +282,16 @@ Examples:
 
 
     a1, a2, a3 = parsed.args
+
+    try:
+        number = int(a3)
+    except ValueError:
+        print(f"ERROR: count must be an integer, got '{a3}'")
+        return
+    if number < 1:
+        print("ERROR: count must be >= 1")
+        return
+    
 
     valid_dbs = {"uniprot", "af", "pdb", "enst"}
 
@@ -301,20 +316,11 @@ Examples:
         return
 
     try:
-        if number == 1:
-
-            random_id = get_random_uniprot_id_for_species(species, db, taxon_map)
-            print(random_id)
-
-        elif number > 1:
-            for i in range(1,number+1):
-                        random_id = get_random_uniprot_id_for_species(species, db, taxon_map)
-                        print(random_id)
-    except Exception as e: 
-        if isinstance(e, IndexError):
-            print(f"Not enough ID's. Try less than:", number) # most common error is that some species only have (ie) 5 PDB ID's, and the user migth as for 5 random. This error handles that
-        else:
-            print(f"Ups!: {e}")
+        for rid in get_random_ids(species, db, taxon_map, number):
+            print(rid)
+    except Exception as e:
+        print(f"Error: {e}")
+    
 
 if __name__ == "__main__":
     main()
