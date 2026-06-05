@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "radid"
+version = "0.1.0"
+description = "Fetch random UniProt / AlphaFold / PDB / Ensembl-ENST IDs from UniProt proteomes."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [{ name = "Juan Mac Donagh", email = "macjuan17@gmail.com" }]
+dependencies = ["requests", "tqdm"]
+
+[project.urls]
+Homepage = "https://github.com/Juanmacdonagh17/radid"
+
+[project.scripts]
+radid = "radid:main"
+
+[tool.setuptools]
+py-modules = ["radid"]
