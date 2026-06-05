@@ -260,8 +260,8 @@ Examples:
         print("Local files available at: ", ids_dir)
         print("Downloaded species:")
         print("-----------------------------------------------------------------------------")
-        for i in os.listdir(ids_dir):
-    
+        files = os.listdir(ids_dir) if os.path.isdir(ids_dir) else []
+        for i in files:
             print(i[:-4]) # so it does not print the .tsv each time, just the file name
         print("\n")
         print("-----------------------------------------------------------------------------")
